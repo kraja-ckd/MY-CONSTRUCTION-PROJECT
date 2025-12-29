@@ -1,0 +1,12 @@
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore actual config with secrets
+config.js
+
+# Ignore node_modules (if you use npm later)
+node_modules/
+
+# Ignore log files
+*.log
