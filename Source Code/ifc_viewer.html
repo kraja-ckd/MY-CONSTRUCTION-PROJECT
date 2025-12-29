@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFC Viewer (High Performance)</title>
+    <link rel="icon" href="cpf-logo.png" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        body { margin: 0; overflow: hidden; background: radial-gradient(circle at center, #ffffff 0%, #f1f5f9 100%); }
+        #canvas-container { position: relative; width: 100vw; height: 100vh; }
+
+        #loading {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.98);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 1000; transition: opacity 0.5s ease;
+        }
+        .spinner-custom {
+            width: 40px; height: 40px; border: 3px solid #cbd5e1;
+            border-top-color: #3b82f6; border-radius: 50%;
+            animation: spin 0.8s linear infinite; margin-bottom: 1rem;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .progress-bar { width: 200px; height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; margin-top: 10px; }
+        .progress-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.2s; }
+
+        #controls-panel {
+            position: absolute; top: 20px; right: 20px; z-index: 10;
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid #e2e8f0;
+            padding: 1rem; border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            width: 260px; font-family: 'Sarabun', sans-serif;
+        }
+
+        #info-panel {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 0.8rem 1.2rem; border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+
+        .axis-btn {
+            padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 4px;
+            background: #f1f5f9; cursor: pointer; font-weight: 600; flex: 1; 
+            color: #64748b; transition: 0.2s; font-size: 0.85rem;
+        }
+        .axis-btn:hover { background: #e2e8f0; color: #0f172a; }
+        .axis-btn.active { background: #3b82f6; color: #fff; border-color: #3b82f6; } 
+        
+        #axis-selector { display: flex; gap: 6px; margin-top: 8px; }
+        
+        input[type=range] { 
+            width: 100%; cursor: pointer; height: 4px; background: #cbd5e1; 
+            border-radius: 2px; -webkit-appearance: none; margin-top: 10px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px; background: #3b82f6; 
+            border-radius: 50%; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">
+        <div class="spinner-custom"></div>
+        <div style="text-align: center;">
+            <p id="status" style="font-weight:600; color:#334155;">Optimizing & Loading...</p>
+            <div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+            <p id="percent-text" style="color:#64748b; font-size:0.85rem; margin-top:5px;">0%</p>
+        </div>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="canvas"></canvas>
+
+        <div id="info-panel">
+            <h2 id="project-name" style="margin:0; color:#1e293b; font-size:1rem; font-weight:700;">Construction Model</h2>
+            <p style="margin:2px 0 0; color:#64748b; font-size:0.8rem;"><i class="fas fa-bolt"></i> Fast Viewer</p>
+        </div>
+        
+        <div id="controls-panel">
+            <button id="toggle-section-btn" class="btn" style="width:100%; justify-content:center; background:#1e293b; color:white; border-radius:6px; padding:8px; border:none; cursor:pointer;">
+                <i class="fas fa-cut"></i> Section Cut
+            </button>
+            
+            <div id="section-controls" style="display: none; margin-top: 15px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+                <label style="font-size:0.85rem; font-weight:600; color:#334155;">Cut Axis</label>
+                <div id="axis-selector">
+                    <button class="axis-btn active" data-axis="Y">Top (Y)</button>
+                    <button class="axis-btn" data-axis="X">Side (X)</button>
+                    <button class="axis-btn" data-axis="Z">Front (Z)</button>
+                </div>
+                
+                <div style="margin-top:15px;">
+                    <label style="font-size:0.85rem; font-weight:600; color:#334155;">Position</label>
+                    <input type="range" id="section-slider">
+                    <div style="text-align:right; font-weight:600; color:#3b82f6; font-size:0.85rem; margin-top:5px;" id="slider-value">0.00 m</div>
+                </div>
+            </div>
+            
+            <div style="margin-top:15px; font-size:0.75rem; color:#94a3b8; text-align:center; border-top:1px solid #e2e8f0; padding-top:10px;">
+                Left Click: Rotate | Right Click: Pan | Scroll: Zoom
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.155.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.155.0/examples/jsm/",
+                "three/examples/jsm/": "https://unpkg.com/three@0.155.0/examples/jsm/",
+                "web-ifc": "https://unpkg.com/web-ifc@0.0.46/web-ifc-api.js",
+                "web-ifc-three": "https://unpkg.com/web-ifc-three@0.0.126/IFCLoader.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { IFCLoader } from 'web-ifc-three';
+
+        const canvas = document.getElementById('canvas');
+        const loadingDiv = document.getElementById('loading');
+        const progressBar = document.getElementById('progress');
+        const percentText = document.getElementById('percent-text');
+        const statusText = document.getElementById('status');
+        
+        const sectionSlider = document.getElementById('section-slider');
+        const sliderValue = document.getElementById('slider-value');
+        const toggleBtn = document.getElementById('toggle-section-btn');
+        const sectionControls = document.getElementById('section-controls');
+        const axisBtns = document.querySelectorAll('.axis-btn');
+
+        let scene, camera, renderer, controls, ifcLoader;
+        let clippingPlanes = [];
+        let activeAxis = 'Y';
+        let modelBounds = { min: new THREE.Vector3(), max: new THREE.Vector3(), center: new THREE.Vector3() };
+        
+        const FAR_AWAY = 10000;
+        const urlParams = new URLSearchParams(window.location.search);
+        const modelUrl = urlParams.get('modelUrl');
+        if(urlParams.get('projectName')) document.getElementById('project-name').textContent = urlParams.get('projectName');
+
+        const CORS_PROXIES = ['https://corsproxy.io/?', 'https://api.allorigins.win/raw?url='];
+
+        function init() {
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 5000);
+            
+            // ⚡️ PERFORMANCE OPTIMIZATION 1: Renderer Settings
+            renderer = new THREE.WebGLRenderer({ 
+                canvas, 
+                antialias: true, // Keep edges sharp
+                alpha: true, 
+                logarithmicDepthBuffer: true, // Prevent z-fighting
+                powerPreference: "high-performance" // Request GPU
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            // ⚡️ PERFORMANCE OPTIMIZATION 2: Cap Pixel Ratio
+            // Limit to 1.5 to prevent 4K rendering lag on high-DPI screens
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); 
+            
+            renderer.localClippingEnabled = false;
+            renderer.shadowMap.enabled = false; // No shadows for max speed
+
+            // Lights (Simplified)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7); 
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            dirLight.position.set(100, 100, 50);
+            scene.add(dirLight);
+            const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.4); 
+            dirLight2.position.set(-100, 50, -50);
+            scene.add(dirLight2);
+
+            const grid = new THREE.GridHelper(500, 100, 0x94a3b8, 0xe2e8f0);
+            scene.add(grid);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.2;
+            controls.screenSpacePanning = true;
+
+            clippingPlanes = [
+                new THREE.Plane(new THREE.Vector3(-1, 0, 0), FAR_AWAY), // X
+                new THREE.Plane(new THREE.Vector3(0, -1, 0), FAR_AWAY), // Y
+                new THREE.Plane(new THREE.Vector3(0, 0, -1), FAR_AWAY)  // Z
+            ];
+
+            window.addEventListener('resize', onResize);
+            setupUI();
+            loadModel();
+            animate();
+        }
+
+        async function loadModel() {
+            if (!modelUrl) return;
+            
+            ifcLoader = new IFCLoader();
+            ifcLoader.ifcManager.setWasmPath('https://unpkg.com/web-ifc@0.0.46/');
+
+            attemptLoad(modelUrl, 0);
+        }
+
+        async function attemptLoad(url, proxyIndex) {
+            let finalUrl = url;
+            if (proxyIndex > 0 && proxyIndex <= CORS_PROXIES.length) {
+                finalUrl = CORS_PROXIES[proxyIndex - 1] + encodeURIComponent(url);
+                statusText.textContent = `Proxy attempt ${proxyIndex}...`;
+            }
+
+            ifcLoader.load(
+                finalUrl,
+                (ifcModel) => {
+                    scene.add(ifcModel);
+                    fitCamera(ifcModel);
+
+                    ifcModel.traverse(child => {
+                        if (child.isMesh) {
+                            if (child.material) {
+                                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                                mats.forEach(m => {
+                                    m.side = THREE.DoubleSide;
+                                    m.clippingPlanes = clippingPlanes;
+                                    m.clipShadows = false;
+                                });
+                            }
+
+                            // ⚡️ PERFORMANCE OPTIMIZATION 3: Smart Edges
+                            // Only add edges if geometry is large enough to be "structural"
+                            // Skip small bolts/screws to save huge performance
+                            if (child.geometry.boundingSphere) {
+                                const radius = child.geometry.boundingSphere.radius;
+                                if (radius > 0.1) { // Only objects > 10cm radius
+                                    const edges = new THREE.EdgesGeometry(child.geometry, 40); 
+                                    const line = new THREE.LineSegments(
+                                        edges, 
+                                        new THREE.LineBasicMaterial({ color: 0x000000, opacity: 0.25, transparent: true })
+                                    );
+                                    line.material.clippingPlanes = clippingPlanes;
+                                    child.add(line);
+                                }
+                            }
+                        }
+                    });
+
+                    statusText.textContent = "Ready";
+                    setTimeout(() => loadingDiv.style.display = 'none', 500);
+                },
+                (xhr) => {
+                    if(xhr.lengthComputable) {
+                        const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                        progressBar.style.width = percent + '%';
+                        percentText.textContent = percent + '%';
+                    }
+                },
+                (err) => {
+                    console.error(err);
+                    if (proxyIndex < CORS_PROXIES.length) attemptLoad(url, proxyIndex + 1);
+                    else statusText.textContent = "Error loading model.";
+                }
+            );
+        }
+
+        function fitCamera(object) {
+            const box = new THREE.Box3().setFromObject(object);
+            modelBounds.min.copy(box.min);
+            modelBounds.max.copy(box.max);
+            box.getCenter(modelBounds.center);
+
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const dist = maxDim * 1.5;
+
+            controls.target.copy(modelBounds.center);
+            camera.position.set(
+                modelBounds.center.x + dist,
+                modelBounds.center.y + (dist * 0.8),
+                modelBounds.center.z + dist
+            );
+            
+            camera.near = maxDim / 100;
+            camera.far = maxDim * 100;
+            camera.updateProjectionMatrix();
+            controls.update();
+
+            updateSliderRange();
+        }
+
+        function updateSliderRange() {
+            const buffer = 1;
+            let minVal, maxVal;
+
+            if (activeAxis === 'Y') {
+                minVal = modelBounds.min.y - buffer;
+                maxVal = modelBounds.max.y + buffer;
+            } else if (activeAxis === 'X') {
+                minVal = modelBounds.min.x - buffer;
+                maxVal = modelBounds.max.x + buffer;
+            } else {
+                minVal = modelBounds.min.z - buffer;
+                maxVal = modelBounds.max.z + buffer;
+            }
+
+            sectionSlider.min = minVal;
+            sectionSlider.max = maxVal;
+            sectionSlider.step = (maxVal - minVal) / 200;
+            sectionSlider.value = maxVal; 
+            
+            sliderValue.textContent = parseFloat(sectionSlider.value).toFixed(2) + ' m';
+        }
+
+        function setupUI() {
+            toggleBtn.addEventListener('click', () => {
+                const isActive = !renderer.localClippingEnabled;
+                renderer.localClippingEnabled = isActive;
+                
+                toggleBtn.style.background = isActive ? '#ef4444' : '#1e293b';
+                toggleBtn.innerHTML = isActive ? '<i class="fas fa-times"></i> Close Cut' : '<i class="fas fa-cut"></i> Section Cut';
+                sectionControls.style.display = isActive ? 'block' : 'none';
+
+                if(isActive) {
+                    updateSliderRange();
+                    updateClipping();
+                } else {
+                     clippingPlanes.forEach(p => p.constant = FAR_AWAY);
+                }
+            });
+
+            axisBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    axisBtns.forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    clippingPlanes.forEach(p => p.constant = FAR_AWAY);
+                    activeAxis = btn.dataset.axis;
+                    updateSliderRange();
+                    updateClipping();
+                });
+            });
+
+            sectionSlider.addEventListener('input', updateClipping);
+        }
+
+        function updateClipping() {
+            const val = parseFloat(sectionSlider.value);
+            sliderValue.textContent = val.toFixed(2) + ' m';
+            
+            // X=0, Y=1, Z=2
+            const axisMap = { 'X': 0, 'Y': 1, 'Z': 2 };
+            const planeIdx = axisMap[activeAxis];
+
+            if (planeIdx !== undefined) {
+                if (activeAxis === 'Y') clippingPlanes[planeIdx].constant = -val;
+                else if (activeAxis === 'X') clippingPlanes[planeIdx].constant = val;
+                else clippingPlanes[planeIdx].constant = val;
+            }
+        }
+
+        function onResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>

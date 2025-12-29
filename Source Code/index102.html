@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดการโครงการ - CPF (v2.3)</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <h1>ระบบจัดการโครงการ</h1>
+        <p>Construction Project Dashboard — CPF (v2.3)</p>
+    </header>
+
+    <main>
+        <div id="error" class="error" style="display:none;"></div>
+        <div id="loading" class="loading">กำลังประมวลผล...</div>
+
+        <div class="header-controls">
+            <div>
+                <label style="margin-right: 0.5rem;">มุมมอง:</label>
+                <select id="roleSelect" onchange="window.App.changeRole(this.value)">
+                    <option value="admin">แอดมิน</option>
+                    <option value="survey">ทีมสำรวจโครงการ</option>
+                    <option value="design">ทีมออกแบบ</option>
+                    <option value="bidding">ทีมประมูล</option>
+                    <option value="pm">ทีมบริหารโครงการ</option>
+                </select>
+            </div>
+            
+            <div id="addBtnContainer">
+                <button class="btn btn-gold" onclick="window.App.toggleForm()" id="addBtn">เพิ่มโครงการใหม่</button>
+            </div>
+        </div>
+
+        <div id="formContainer" class="form-container" style="display:none;">
+            <h2 id="formTitle">เพิ่มโครงการใหม่</h2>
+            <div class="form-grid" id="formFields"></div>
+            
+            <div style="display:flex; gap:0.75rem; margin-top:2rem;">
+                <button id="forwardBtn" class="btn btn-gold" onclick="window.App.forwardProject()" style="flex:1; display:none;">บันทึกและส่งต่อ</button>
+                
+                <button id="completeBtn" class="btn btn-gold" onclick="window.App.completeProject()" style="flex:1; display:none;">เสร็จสิ้นโครงการ</button>
+                
+                <button id="saveBtn" class="btn btn-simple-action" onclick="window.App.saveProject()" style="flex:1;">บันทึก (ยังไม่ส่ง)</button>
+                
+                <button class="btn btn-gray" onclick="window.App.toggleForm(null, true)" style="flex:1;">ยกเลิก</button>
+            </div>
+        </div>
+        
+        <div id="admin-search-container" class="search-container" style="display: none;">
+            <input type="text" id="searchInput" placeholder="ค้นหาด้วยชื่อโครงการ...">
+            <button class="btn btn-gold" onclick="window.App.handleSearch()">ค้นหา</button>
+            <button id="clearSearchBtn" class="btn btn-gray" onclick="window.App.clearSearch()" style="display: none; padding: 0.75rem; line-height: 1;">ล้าง</button>
+        </div>
+
+        <div class="table-container">
+            <h2 id="table-title" style="padding: 1.5rem; border-bottom: 2px solid var(--border-gold);"></h2>
+            <div id="tableContent"></div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script type="module" src="app.js"></script>
+    
+</body>
+</html>
